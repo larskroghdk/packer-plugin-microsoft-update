@@ -1,10 +1,12 @@
-module github.com/rgl/packer-plugin-windows-update
+module github.com/larskroghdk/packer-plugin-microsoft-update
 
 go 1.27.4
 
 require (
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/hashicorp/packer-plugin-sdk v0.6.13
+	github.com/mitchellh/mapstructure v1.5.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/zclconf/go-cty v1.20.0
 )
 
@@ -62,7 +64,6 @@ require (
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/mitchellh/iochan v1.0.0 // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect

@@ -1,26 +1,20 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"os"
 
 	"github.com/hashicorp/packer-plugin-sdk/plugin"
-	v "github.com/hashicorp/packer-plugin-sdk/version"
-	"github.com/rgl/packer-plugin-windows-update/update"
-)
-
-var (
-	version = "0.0.0"
-	commit  = "unknown"
-	date    = "unknown"
+	"github.com/larskroghdk/packer-plugin-microsoft-update/provisioner"
+	"github.com/larskroghdk/packer-plugin-microsoft-update/version"
 )
 
 func main() {
-	log.Printf("Starting packer-plugin-windows-update (version %s; commit %s; date %s)", version, commit, date)
-	pps := plugin.NewSet()
-	pps.RegisterProvisioner(plugin.DEFAULT_NAME, new(update.Provisioner))
-	pps.SetVersion(v.NewPluginVersion(version, "", ""))
-	err := pps.Run()
-	if err != nil {
-		log.Fatalf("Failed to start: %v", err)
+	pluginSet := plugin.NewSet()
+	pluginSet.RegisterProvisioner(plugin.DEFAULT_NAME, new(provisioner.Provisioner))
+	pluginSet.SetVersion(version.PluginVersion)
+	if err := pluginSet.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
 }

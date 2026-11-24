@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/larskroghdk/packer-plugin-microsoft-update/report.schema.json",
+  "title": "packer-plugin-microsoft-update report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "plugin", "status", "status_reason", "started_at", "completed_at",
+    "duration_seconds", "system", "source", "settings", "passes", "reboots", "reboot_events",
+    "summary", "updates", "offline_packages", "errors"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.\\d+\\.\\d+$" },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "commit"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "commit": { "type": "string" }
+      }
+    },
+    "status": { "enum": ["updated", "partial", "failed", "unsupported", "cancelled"] },
+    "status_reason": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "duration_seconds": { "type": "number", "minimum": 0 },
+    "system": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "caption", "version", "build", "update_build_revision", "display_version", "edition_id",
+            "installation_type", "product_type", "architecture", "language", "powershell_version",
+            "clr_version", "windows_update_agent_version", "insider_branch", "wsus_configured",
+            "windows_update_access_disabled", "internet_locations_disabled", "microsoft_update_registered",
+            "supports_add_service2", "update_service_start_mode", "system_drive_free_bytes", "missing_prerequisites"
+          ],
+          "properties": {
+            "caption": { "type": "string" },
+            "version": { "type": "string" },
+            "build": { "type": "integer", "minimum": 0 },
+            "update_build_revision": { "type": "integer", "minimum": 0 },
+            "display_version": { "type": "string" },
+            "edition_id": { "type": "string" },
+            "installation_type": { "type": "string" },
+            "product_type": { "type": "integer" },
+            "architecture": { "type": "string" },
+            "language": { "type": "string" },
+            "powershell_version": { "type": "string" },
+            "clr_version": { "type": "string" },
+            "windows_update_agent_version": { "type": "string" },
+            "insider_branch": { "type": "string" },
+            "wsus_configured": { "type": "boolean" },
+            "windows_update_access_disabled": { "type": "boolean" },
+            "internet_locations_disabled": { "type": "boolean" },
+            "microsoft_update_registered": { "type": "boolean" },
+            "supports_add_service2": { "type": "boolean" },
+            "update_service_start_mode": { "type": "string" },
+            "system_drive_free_bytes": { "type": "integer" },
+            "lifecycle_notice": { "type": "string" },
+            "missing_prerequisites": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "effective", "policy_managed", "warnings"],
+      "properties": {
+        "requested": { "enum": ["default", "windows-update", "microsoft-update", "wsus", "offline"] },
+        "effective": { "type": "string" },
+        "service_id": { "type": "string" },
+        "policy_managed": { "type": "boolean" },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile", "search_criteria", "classifications", "include_optional_updates", "include_preview_updates",
+        "include_driver_updates", "include_feature_updates", "legacy_filters", "max_update_passes",
+        "max_reboots", "max_install_attempts"
+      ],
+      "properties": {
+        "profile": { "type": "string" },
+        "search_criteria": { "type": "string" },
+        "classifications": { "type": "array", "items": { "type": "string" } },
+        "include_optional_updates": { "type": "boolean" },
+        "include_preview_updates": { "type": "boolean" },
+        "include_driver_updates": { "type": "boolean" },
+        "include_feature_updates": { "type": "boolean" },
+        "legacy_filters": { "type": "boolean" },
+        "max_update_passes": { "type": "integer", "minimum": 1 },
+        "max_reboots": { "type": "integer", "minimum": 0 },
+        "max_install_attempts": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "passes": { "type": "integer", "minimum": 0 },
+    "reboots": { "type": "integer", "minimum": 0 },
+    "reboot_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "reason", "expected"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "reason": { "type": "string" },
+          "expected": { "type": "boolean" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["discovered", "installed", "failed", "skipped", "excluded", "not_applicable", "remaining"],
+      "properties": {
+        "discovered": { "type": "integer", "minimum": 0 },
+        "installed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "excluded": { "type": "integer", "minimum": 0 },
+        "not_applicable": { "type": "integer", "minimum": 0 },
+        "remaining": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "updates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "revision", "title", "kbs", "classification", "products", "browse_only", "preview",
+          "state", "reason", "first_seen_pass", "attempts"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+          "revision": { "type": "integer" },
+          "title": { "type": "string" },
+          "kbs": { "type": "array", "items": { "type": "string", "pattern": "^KB\\d+$" } },
+          "classification": { "type": "string" },
+          "products": { "type": "array", "items": { "type": "string" } },
+          "browse_only": { "type": "boolean" },
+          "preview": { "type": "boolean" },
+          "state": { "enum": ["installed", "failed", "excluded", "skipped", "remaining", "not-applicable", "superseded"] },
+          "reason": { "type": "string" },
+          "first_seen_pass": { "type": "integer", "minimum": 0 },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["pass", "phase", "result", "result_code", "hresult", "hresult_name", "reboot_required"],
+              "properties": {
+                "pass": { "type": "integer", "minimum": 1 },
+                "phase": { "enum": ["download", "install"] },
+                "result": { "type": "string" },
+                "result_code": { "type": "integer" },
+                "hresult": { "type": "string", "pattern": "^0x[0-9A-F]{8}$" },
+                "hresult_name": { "type": "string" },
+                "reboot_required": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "offline_packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256", "signature_status", "signer", "result", "exit_code", "hresult_name", "reboot_required"],
+        "properties": {
+          "name": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^([0-9a-f]{64})?$" },
+          "signature_status": { "type": "string" },
+          "signer": { "type": "string" },
+          "result": { "enum": ["installed", "already-installed", "not-applicable", "failed", "rejected"] },
+          "exit_code": { "type": "integer" },
+          "hresult_name": { "type": "string" },
+          "reboot_required": { "type": "boolean" }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "phase", "class", "message"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "phase": { "type": "string" },
+          "class": { "type": "string" },
+          "hresult": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

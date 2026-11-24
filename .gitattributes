@@ -1,1 +1,5 @@
-/update/*.ps1 -text
+* text=auto eol=lf
+*.exe binary
+*.msu binary
+*.cab binary
+*.zip binary

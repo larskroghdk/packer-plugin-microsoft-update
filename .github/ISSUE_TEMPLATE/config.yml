@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/larskroghdk/packer-plugin-microsoft-update/security/advisories/new
+    about: Report security problems privately, not as an issue.
+  - name: Problem with a Windows update itself
+    url: https://support.microsoft.com/windows
+    about: Updates that fail on any machine, not only during a Packer build, are Windows problems.

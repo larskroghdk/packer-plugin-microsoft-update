@@ -1,0 +1,286 @@
+---
+description: >
+  The microsoft-update provisioner installs Windows updates from Windows Update,
+  Microsoft Update, WSUS, or offline packages, restarts the guest as often as
+  needed, and writes a JSON report.
+page_title: Microsoft Update - Provisioners
+nav_title: Microsoft Update
+---
+
+# Microsoft Update Provisioner
+
+Type: `microsoft-update`
+
+The `microsoft-update` provisioner installs Windows updates on the guest with the
+Windows Update Agent API. It searches, downloads, and installs updates in passes,
+restarts the guest when an update needs it, and repeats until no eligible update
+remains or a limit is reached. Each run can write a JSON report that lists every
+update it saw and what happened to it.
+
+The provisioner runs every Windows Update Agent call in a scheduled task on the
+guest, because the agent refuses most calls from a remote WinRM or SSH session.
+
+## Basic example
+
+```hcl
+packer {
+  required_plugins {
+    microsoft-update = {
+      source  = "github.com/larskroghdk/microsoft-update"
+      version = ">= 0.1.0"
+    }
+  }
+}
+
+build {
+  sources = ["source.hyperv-vmcx.windows"]
+
+  provisioner "microsoft-update" {
+    update_source = "microsoft-update"
+    report_path   = "artifacts/updates.json"
+  }
+}
+```
+
+Without any settings the provisioner uses the update source the guest is
+configured for and installs the `recommended` profile: security, critical,
+definition, update rollup, service pack, feature pack, tool, and regular updates.
+It does not install drivers, feature updates, preview updates, or optional updates.
+
+## Configuration reference
+
+All settings are optional.
+
+### Update source
+
+- `update_source` (string) - Where the guest searches for updates. One of:
+
+  - `default` (default) - The source the guest is configured for. That is WSUS
+    when the `WUServer` and `UseWUServer` policies are set, Microsoft Update when
+    the Microsoft Update service is registered, and Windows Update otherwise.
+  - `windows-update` - Windows Update. Offers updates for Windows only.
+  - `microsoft-update` - Microsoft Update. Also offers updates for other Microsoft
+    products, such as Microsoft 365 Apps, SQL Server, and .NET. The provisioner
+    registers the Microsoft Update service on the guest if it is not registered.
+    The registration stays on the image.
+  - `wsus` - The WSUS server configured by policy. The provisioner does not
+    configure WSUS; set the policies with Group Policy or an earlier provisioner.
+  - `offline` - Install only the packages listed in `offline_package` blocks.
+    The provisioner does not contact any update service.
+
+  The provisioner never changes update policies or service configuration. If a
+  policy blocks the requested source, the run stops with status `unsupported`.
+  See [Update sources](https://github.com/larskroghdk/packer-plugin-microsoft-update/blob/main/docs/update-sources.md).
+
+- `offline_package` (block, repeatable) - A `.msu` or `.cab` package to install
+  before the online update passes, or as the only work when `update_source =
+  "offline"`. Set exactly one of `source` and `guest_path`.
+
+  - `source` (string) - Path of the package on the machine that runs Packer. The
+    provisioner uploads it to the guest.
+  - `guest_path` (string) - Path of a package that is already on the guest, for
+    example on attached installation media.
+  - `sha256` (string) - Expected SHA-256 checksum, as 64 hexadecimal characters.
+    Required with `guest_path`. Optional with `source`; when set, the checksum of
+    the host file must match before the upload starts.
+
+  The guest checks the checksum and requires a valid Authenticode signature from
+  Microsoft Corporation before it installs a package. `.msu` packages are installed
+  with `wusa.exe`, `.cab` packages with `DISM /Add-Package`.
+
+  ```hcl
+  offline_package {
+    source = "packages/windows10.0-kb5034441-x64.msu"
+  }
+
+  offline_package {
+    guest_path = "D:\\updates\\ssu.cab"
+    sha256     = "3f1a...e9"
+  }
+  ```
+
+### Update selection
+
+The provisioner first asks the update source for updates that match
+`search_criteria`, and then decides for each update whether to install it. See
+[Update selection](https://github.com/larskroghdk/packer-plugin-microsoft-update/blob/main/docs/update-selection.md)
+for the full order of the rules.
+
+- `profile` (string) - Starting set of update classifications. One of:
+
+  | Profile                 | Classifications                                                                                         | Drivers, feature, preview, optional |
+  | ----------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+  | `security`              | `security`, `critical`, `definition`                                                                    | No                                  |
+  | `recommended` (default) | `security`, `critical`, `definition`, `update-rollup`, `service-pack`, `feature-pack`, `tool`, `update` | No                                  |
+  | `all`                   | All classifications                                                                                     | Yes                                 |
+
+- `classifications` (list of strings) - Replaces the classifications of the profile.
+  Use the names `security`, `critical`, `definition`, `update-rollup`,
+  `service-pack`, `feature-pack`, `tool`, `update`, `driver`, `upgrade`, and
+  `application`, or the Windows Update classification GUIDs.
+
+- `products` (list of strings) - Install only updates for these products. Each
+  value is a product or product family name, such as `Windows Server 2022`, or a
+  product category GUID. Names are compared without regard to case.
+
+- `include_optional_updates` (bool) - Install optional updates (updates marked
+  `BrowseOnly`). Defaults to the profile: `true` for `all`, `false` otherwise.
+
+- `include_preview_updates` (bool) - Install preview updates, such as optional
+  non-security preview cumulative updates. Defaults to the profile.
+
+- `include_driver_updates` (bool) - Install driver updates. Defaults to the profile.
+
+- `include_feature_updates` (bool) - Install feature updates (the `upgrade`
+  classification), which move the guest to a newer Windows release. Defaults to
+  the profile.
+
+- `include_kbs` (list of strings) - Install only updates with these KB numbers.
+  Write them as `KB5034441` or `5034441`. When any `include_*` list is set, the
+  provisioner installs only the updates those lists match, and ignores the
+  profile, classifications, products, and `include_*_updates` settings.
+
+- `exclude_kbs` (list of strings) - Never install updates with these KB numbers.
+
+- `include_update_ids` (list of strings) - Install only updates with these update
+  IDs (GUIDs). Same rules as `include_kbs`.
+
+- `exclude_update_ids` (list of strings) - Never install updates with these update IDs.
+
+- `include_titles` (list of strings) - Install only updates whose title matches one
+  of these patterns. Same rules as `include_kbs`. A pattern without `*` or `?`
+  matches any title that contains it. A pattern with `*` or `?` must match the
+  whole title; `*` matches any text and `?` one character. Matching ignores case.
+
+- `exclude_titles` (list of strings) - Never install updates whose title matches
+  one of these patterns.
+
+  Exclusions always win: an update that matches an `exclude_*` list is never
+  installed, even if an `include_*` list also matches it.
+
+- `search_criteria` (string) - The search string passed to
+  [`IUpdateSearcher::Search`](https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdatesearcher-search).
+  Defaults to `IsInstalled=0 and IsHidden=0`. When `filters` is set, it defaults
+  to `BrowseOnly=0 and IsInstalled=0`, the default of the upstream
+  `windows-update` provisioner.
+
+- `filters` (list of strings) - PowerShell filter expressions in the format of the
+  upstream `windows-update` provisioner. Each entry has the form
+  `include:<expression>` or `exclude:<expression>`. The expressions are evaluated
+  in order with the `IUpdate` object as `$_`; the first expression that returns
+  `$true` decides, and an update that no expression matches is not installed.
+
+  ```hcl
+  filters = [
+    "exclude:$_.Title -like '*Preview*'",
+    "include:$true",
+  ]
+  ```
+
+  `filters` cannot be combined with `profile`, `classifications`, `products`, the
+  `include_*` lists, or the `include_*_updates` settings. The `exclude_*` lists
+  still apply. Prefer the declarative settings for new templates: they are
+  validated when Packer starts, and the report explains each decision.
+
+### Passes, restarts, and retries
+
+- `max_update_passes` (number) - Maximum number of search and install passes.
+  Defaults to `20`. Must be at least `1`.
+
+- `max_reboots` (number) - Maximum number of restarts the provisioner starts.
+  Defaults to `15`. When a restart is needed after the limit is reached, the run
+  ends with status `partial`. Set `0` to never restart.
+
+- `max_updates_per_pass` (number) - Maximum number of updates installed in one
+  pass. Defaults to `1000`. Must be at least `1`. `update_limit` is accepted as an
+  alias.
+
+- `max_install_attempts` (number) - How often the provisioner tries to install an
+  update that stays applicable before it marks the update as failed. Defaults to
+  `2`. Must be at least `1`.
+
+- `max_retries` (number) - How often a guest operation is retried after a
+  transient failure, such as a lost connection or a Windows Update Agent error
+  that is known to be temporary. Defaults to `3`. Set `0` to never retry.
+  `update_max_retries` is accepted as an alias; when both are set,
+  `max_retries` wins.
+
+- `retry_delay` (duration) - Delay before the first retry. The delay doubles with
+  every retry, up to five minutes. Defaults to `15s`. `0s` retries at once.
+
+### Timeouts
+
+Each timeout applies to one phase of one guest operation. When a timeout expires,
+the provisioner stops the scheduled task on the guest and treats the phase as a
+transient failure.
+
+- `search_timeout` (duration) - Time allowed for one update search. Defaults to `30m`.
+- `download_timeout` (duration) - Time allowed for downloading one pass. Defaults to `120m`.
+- `install_timeout` (duration) - Time allowed for installing one pass, and for
+  uploading and installing offline packages. Defaults to `120m`.
+- `reboot_timeout` (duration) - Time allowed for the guest to restart and accept
+  commands again. Defaults to `60m`. `restart_timeout` is accepted as an alias;
+  when both are set, `reboot_timeout` wins.
+- `servicing_timeout` (duration) - Time the provisioner waits after a restart for
+  Windows servicing (`TiWorker.exe`) to become idle. Defaults to `30m`. Set `0s`
+  to skip the wait.
+
+`search_timeout`, `download_timeout`, `install_timeout`, and `reboot_timeout` must
+be greater than zero.
+
+### Result and report
+
+- `fail_on_error` (bool) - Whether the provisioner fails the build when the run
+  does not end with status `updated`. Defaults to `true`. With `false`, the
+  provisioner prints a warning and the build continues. A cancelled build always
+  stops.
+
+- `report_path` (string) - Path on the machine that runs Packer where the JSON
+  report is written. Parent directories are created. The report is written for
+  every status, including failures. See
+  [Reporting](https://github.com/larskroghdk/packer-plugin-microsoft-update/blob/main/docs/reporting.md).
+
+- `log_level` (string) - `info` (default) or `debug`. With `debug`, the Packer
+  output also shows skipped and excluded updates, guest output, and heartbeats.
+  Packer's own log (`PACKER_LOG=1`) always contains the debug messages.
+
+### Guest account
+
+- `username` (string) - Account the scheduled task runs as. Defaults to `SYSTEM`,
+  which needs no password.
+
+- `password` (string) - Password of `username`. Required when `username` is not
+  `SYSTEM`, and not allowed when it is. Mark the variable that holds it as
+  `sensitive`.
+
+## Run results
+
+At the end of a run the provisioner prints a summary and, when `report_path` is
+set, writes the report. The status decides whether the build continues:
+
+| Status        | Meaning                                                  | Build                                 |
+| ------------- | -------------------------------------------------------- | ------------------------------------- |
+| `updated`     | No eligible update remains and nothing failed.           | Continues                             |
+| `partial`     | Some updates failed or remain, or a limit was reached.   | Fails, unless `fail_on_error = false` |
+| `failed`      | An operation failed before any update was installed.     | Fails, unless `fail_on_error = false` |
+| `unsupported` | The guest or a policy does not allow the requested work. | Fails, unless `fail_on_error = false` |
+| `cancelled`   | The build was cancelled.                                 | Stops                                 |
+
+## Restarts
+
+The provisioner restarts the guest itself; you do not need a `windows-restart`
+provisioner after it. It restarts when a restart is already pending at the start,
+when an installed update needs one, and again after a restart while Windows still
+reports a pending restart. After each restart it waits until Windows servicing is
+idle. See [Restart handling](https://github.com/larskroghdk/packer-plugin-microsoft-update/blob/main/docs/reboot-handling.md).
+
+## Requirements
+
+- A Windows guest with Windows PowerShell 2.0 or later and the Task Scheduler service.
+- A WinRM communicator. SSH is not tested.
+- The Windows Update (`wuauserv`) service must not be disabled, except with
+  `update_source = "offline"`.
+- An account with administrative rights for the communicator.
+
+See the [compatibility matrix](https://github.com/larskroghdk/packer-plugin-microsoft-update/blob/main/docs/compatibility.md)
+for the Windows releases the provisioner is built for and their test status.

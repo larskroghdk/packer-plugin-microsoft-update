@@ -1,53 +1,63 @@
 GOPATH := $(shell go env GOPATH | tr '\\' '/')
 GOEXE := $(shell go env GOEXE)
-GOHOSTOS := $(shell go env GOHOSTOS)
-GOHOSTARCH := $(shell go env GOHOSTARCH)
-GOHOSTARCHVERSION := $(shell go env "GO$(shell go env GOHOSTARCH | tr '[:lower:]' '[:upper:]')")
-GORELEASER := $(GOPATH)/bin/goreleaser
-GOVERSIONINFO := $(GOPATH)/bin/goversioninfo
-SOURCE_FILES := *.go update/*
-PLUGIN_PATH := dist/packer-plugin-windows-update_$(GOHOSTOS)_$(GOHOSTARCH)_$(GOHOSTARCHVERSION)/packer-plugin-windows-update_*_$(GOHOSTOS)_$(GOHOSTARCH)$(GOEXE)
-
-# see https://github.com/goreleaser/goreleaser
-# renovate: datasource=github-releases depName=goreleaser/goreleaser extractVersion=^v?(?<version>2\..+)
-GORELEASER_VERSION := 2.20.2
-
-# see https://github.com/josephspurrier/goversioninfo
-# renovate: datasource=github-releases depName=josephspurrier/goversioninfo
+PLUGIN_NAME := packer-plugin-microsoft-update
+PLUGIN_SOURCE := github.com/larskroghdk/microsoft-update
+SDK_VERSION := $(shell go list -m -f '{{.Version}}' github.com/hashicorp/packer-plugin-sdk)
+GORELEASER_VERSION := 2.20.0
 GOVERSIONINFO_VERSION := 1.7.0
+GOLANGCI_LINT_VERSION := 2.15.0
+GOVULNCHECK_VERSION := 1.10.0
+PACKER_SDC := $(GOPATH)/bin/packer-sdc$(GOEXE)
+GORELEASER := $(GOPATH)/bin/goreleaser$(GOEXE)
+GOVERSIONINFO := $(GOPATH)/bin/goversioninfo$(GOEXE)
+GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint$(GOEXE)
+API_VERSION = $(shell go run . describe 2>/dev/null | sed -E 's/.*"api_version":"([^"]+)".*/\1/')
 
-all: clean build
+.PHONY: all tools generate build install test test-go test-powershell lint vulncheck release release-snapshot clean
 
-init: $(GORELEASER) $(GOVERSIONINFO)
-	go mod download
+all: generate lint test build
 
-$(GORELEASER):
+tools:
+	go install github.com/hashicorp/packer-plugin-sdk/cmd/packer-sdc@$(SDK_VERSION)
 	go install github.com/goreleaser/goreleaser/v2@v$(GORELEASER_VERSION)
-
-$(GOVERSIONINFO):
 	go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v$(GOVERSIONINFO_VERSION)
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@v$(GOVULNCHECK_VERSION)
 
-build: init $(SOURCE_FILES)
-	API_VERSION="$(shell go run . describe 2>/dev/null | jq -r .api_version)" \
-		$(GORELEASER) build --skip=validate --clean --single-target
+generate:
+	PATH="$(GOPATH)/bin:$$PATH" go generate ./...
+	rm -rf .web-docs
+	mkdir -p docs-partials
+	$(PACKER_SDC) renderdocs -src docs/integration -partials docs-partials -dst .web-docs
 
-release-snapshot: init $(SOURCE_FILES)
-	API_VERSION="$(shell go run . describe 2>/dev/null | jq -r .api_version)" \
-		$(GORELEASER) release --snapshot --skip=publish --clean
+build:
+	go build -trimpath -o $(PLUGIN_NAME)$(GOEXE) .
 
-release: init $(SOURCE_FILES)
-	API_VERSION="$(shell go run . describe 2>/dev/null | jq -r .api_version)" \
-		$(GORELEASER) release --clean
+install: build
+	packer plugins install --path $(PLUGIN_NAME)$(GOEXE) $(PLUGIN_SOURCE)
 
-# see https://www.packer.io/guides/hcl/component-object-spec/
-update/provisioner.hcl2spec.go: update/provisioner.go
-	go install github.com/hashicorp/packer-plugin-sdk/cmd/packer-sdc@$(shell go list -m -f '{{.Version}}' github.com/hashicorp/packer-plugin-sdk)
-	go generate update/provisioner.go
+test: test-go test-powershell
+
+test-go:
+	go test -count=1 ./...
+
+test-powershell:
+	pwsh -NoProfile -File test/Invoke-GuestTests.ps1
+
+lint:
+	$(GOLANGCI_LINT) run ./...
+	pwsh -NoProfile -File test/Invoke-ScriptAnalysis.ps1
+
+vulncheck:
+	govulncheck ./...
+
+release-snapshot: generate
+	cd .web-docs && zip -qr ../docs.zip .
+	API_VERSION="$(API_VERSION)" $(GORELEASER) release --snapshot --clean --skip=publish,sign
+
+release: generate
+	cd .web-docs && zip -qr ../docs.zip .
+	API_VERSION="$(API_VERSION)" $(GORELEASER) release --clean
 
 clean:
-	rm -rf update/provisioner.hcl2spec.go dist tmp* output-test *.log *.syso
-
-test: build
-	./test.sh
-
-.PHONY: all init build release release-snapshot install uninstall clean test
+	rm -rf dist docs.zip $(PLUGIN_NAME) $(PLUGIN_NAME).exe *.syso output-* *.log
