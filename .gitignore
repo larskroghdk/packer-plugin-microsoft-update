@@ -1,0 +1,16 @@
+dist/
+docs.zip
+.docs/
+docs-partials/
+packer-plugin-microsoft-update
+packer-plugin-microsoft-update.exe
+*.syso
+*.log
+tmp*/
+output-*/
+.idea/
+artifacts/
+test/integration/results/
+packer_cache/
+crash.log
+*.auto.pkrvars.hcl
